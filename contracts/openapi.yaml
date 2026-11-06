@@ -1,0 +1,94 @@
+openapi: 3.1.0
+info:
+  title: Disruption Companion API
+  version: 0.1.0
+servers:
+  - url: http://localhost:8000
+paths:
+  /api/health:
+    get:
+      operationId: health
+      responses:
+        '200':
+          description: Healthy
+  /api/trips/{booking_id}:
+    get:
+      operationId: getTrip
+      parameters:
+        - name: booking_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200': {description: Booking context, content: {application/json: {schema: {type: object}}}}
+        '404': {description: Unknown booking}
+  /api/trips/{booking_id}/events:
+    get:
+      operationId: getTripEvents
+      parameters:
+        - name: booking_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Evidence list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Evidence'}
+  /api/decisions/analyze:
+    post:
+      operationId: analyzeDisruption
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [booking_id]
+              properties:
+                booking_id: {type: string}
+      responses:
+        '200':
+          description: Analysis result
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Decision'}
+        '404': {description: Unknown booking}
+  /api/actions/rebook:
+    post:
+      operationId: requestRebooking
+      responses:
+        '409': {description: Rebooking unavailable until verification}
+components:
+  schemas:
+    Evidence:
+      type: object
+      required: [event_id, segment_id, type, source, recorded_at]
+      properties:
+        event_id: {type: string}
+        segment_id: {type: string}
+        type: {type: string}
+        source: {type: string}
+        recorded_at: {type: string}
+        delay_minutes: {type: [integer, 'null']}
+        status: {type: [string, 'null']}
+    Decision:
+      type: object
+      required: [booking_id, classification, recommendation, requires_human_review, can_auto_rebook, evidence, warnings, analyzed_at]
+      properties:
+        booking_id: {type: string}
+        classification: {type: string}
+        recommendation: {type: string}
+        requires_human_review: {type: boolean}
+        can_auto_rebook: {type: boolean}
+        evidence:
+          type: array
+          items: {$ref: '#/components/schemas/Evidence'}
+        warnings:
+          type: array
+          items: {type: string}
+        policy_ref: {type: [string, 'null']}
+        analyzed_at: {type: string, format: date-time}
