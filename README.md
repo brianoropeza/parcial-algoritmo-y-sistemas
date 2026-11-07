@@ -1,119 +1,130 @@
 # Disruption Companion — Engineering README
 
-Examen final 2026-B · Análisis de Algoritmos y Sistemas · UDES · Backend: Brian Oropeza · Frontend: Diego Triana
+Final exam 2026-B · Algorithms and Systems Analysis · UDES · Backend: Brian Oropeza (FastAPI) · Frontend: Diego Triana (Streamlit)
 
-## 1. Problema y resultado esperado
-Nubara Airlines necesita explicar a un pasajero qué pasó con su itinerario modificado, qué le corresponde según la política y cuándo interviene una persona, sin comunicar información no validada ni ejecutar acciones de alto impacto sin control. Resultado: un backend FastAPI con un motor de decisiones determinista que combina reserva, eventos operacionales, alternativas y políticas versionadas.
+## 1. Problem and expected outcome
+Nubara Airlines needs to explain to a passenger what happened to a modified itinerary, what they are entitled to under policy, and when a person must step in — without communicating unvalidated information or executing high-impact actions without control. Outcome: a FastAPI backend with a deterministic decision engine that combines booking, operational events, eligible options and versioned policies, plus a Streamlit passenger screen that only displays what the backend decides.
 
-**Caso base ABC123 (resultado verificado por pruebas):** S1 (NB500) está retrasado 160 min según OPS_CORE. El `ON_TIME` de LEGACY_MIRROR se descarta porque la fuente está degradada y su dato es más antiguo. La llegada estimada a LIM es 20:35, después de la salida de S2 (19:05), así que la conexión se pierde. Aplican R3 (`REBOOK_NO_FEE`) y R5 (menor en el grupo, que exige aprobación humana). No aplican R1 ni R2 (160 < 180/240), por lo que no hay voucher de comida. O1 (NB2412, 16-09 08:15) es la única alternativa candidata; O2 se descarta (1 asiento para 2 pasajeros y diferencia de tarifa) y O3 también (política de reembolso no consultada y confianza LOW). Nivel de automatización: **HUMAN**. El sistema explica y muestra O1, pero la reubicación requiere un caso humano aprobado.
+**Base case ABC123 (verified by tests):** S1 (NB500) is delayed 160 min according to OPS_CORE. LEGACY_MIRROR's `ON_TIME` is discarded because the source is degraded and its record is older. The estimated arrival in LIM is 20:35, after S2 departs (19:05), so the connection is missed. R3 (`REBOOK_NO_FEE`) and R5 (minor in the group, requires human approval) apply. R1 and R2 do not (160 < 180/240), so there is no meal voucher. O1 (NB2412, Sep 16 08:15) is the only candidate; O2 is discarded (1 seat for 2 passengers and a fare difference) and so is O3 (refund policy not retrieved, LOW confidence). Automation level: **HUMAN** — the system explains and shows O1, but rebooking requires an approved human case.
 
-## 2. Supuestos y alcance
-- Los datos simulados son la transcripción literal del examen (`backend/app/data/exam_fixtures_abc123.json`). Los campos faltantes (`change_penalty_amount`) se informan y no se rellenan.
-- La llegada estimada es `scheduled_arrival + delay_minutes` en hora local (supuesto: la duración del vuelo no cambia).
-- Implementado: los 7 contratos del examen como mocks, las 5 etapas del motor, los endpoints `trips`, `events`, `options`, `analyze`, `rebook` (idempotente) y `escalate`, y la validación del mensaje al pasajero.
-- Fuera de alcance: frontend (lo hace el compañero), persistencia real, autenticación y verificación real de `approved_case_id`.
+## 2. Assumptions and scope
+- Mock data is a literal transcription of the exam samples (`backend/app/data/exam_fixtures_abc123.json`). Missing fields (`change_penalty_amount`) are reported, never filled in.
+- Estimated arrival = `scheduled_arrival + delay_minutes` in local time (assumption: flight duration does not change).
+- Implemented: the 7 exam contracts as mocks, the 5 engine stages, endpoints `trips`, `events`, `options`, `analyze`, `rebook` (idempotent) and `escalate`, and validation of the passenger message.
+- Frontend in Streamlit (`frontend/`), built by the teammate; it consumes the contract and makes no decisions. Out of scope: real persistence, authentication and real verification of `approved_case_id`.
 
-## 3. Decisiones principales y alternativas descartadas
-El detalle completo está en `docs/DECISIONS.md` (D-001 a D-009).
-| Decisión | Elegida | Descartada |
+## 3. Main decisions and discarded alternatives
+Full detail in `docs/DECISIONS.md` (D-001 to D-014, written in Spanish).
+| Decision | Chosen | Discarded |
 |---|---|---|
-| Algoritmo (D-002) | Pipeline determinista en 5 etapas | Tabla única de reglas; agente con IA |
-| Conflicto de fuentes (D-003) | Jerarquía de confianza; la fuente degradada nunca prevalece; conflicto entre fuentes confiables → humano | "El dato más reciente gana" |
-| Datos personales (D-006) | La API devuelve solo id, nombre y tipo | Exponer la reserva completa |
-| Regla humana R5 (D-007) | Bloquea toda acción de alto impacto del caso | Bloquear solo el manejo prioritario |
-| Alternativas (D-009) | Filtro por asientos, tarifa, política y confianza; orden lexicográfico | Mostrar todas las alternativas tal como llegan |
+| Algorithm (D-002) | Deterministic 5-stage pipeline | Single rule table; AI agent |
+| Source conflicts (D-003, D-010) | Trust hierarchy; a degraded source never prevails; conflict between trusted sources → human | "Latest record wins" |
+| Personal data (D-006) | API returns only id, name and type | Exposing the full booking |
+| Human rule R5 (D-007) | Blocks every high-impact action in the case | Blocking only priority handling |
+| Options (D-009) | Filter by seats, fare, policy and confidence; lexicographic order | Showing all options as received |
+| Policy conditions (D-011) | Safe parser, no `eval`; missing fact → rule not triggered | `eval()` |
 
-## 4. Algoritmo y complejidad
-| Etapa | Archivo | Complejidad |
+## 4. Algorithm and complexity
+| Stage | File | Complexity |
 |---|---|---|
-| 1 Normalizar eventos por segmento | `services/normalization.py` | O(n log n) |
-| 2 Reconciliar fuentes | `services/engine.py · reconcile_segment` | O(n) |
-| 3 Impacto en conexiones | `connection_impact` | O(s) |
-| 4 Evaluar política (parser seguro, sin `eval`) | `evaluate_policy` | O(r) |
-| 5 Filtrar y ordenar alternativas | `filter_options` | O(m log m) |
-Cada etapa agrega pasos a `decision_trace`, que se devuelve en `/api/decisions/analyze`.
+| 1 Normalize events by segment | `services/normalization.py` | O(n log n) |
+| 2 Reconcile sources | `services/engine.py · reconcile_segment` | O(n) |
+| 3 Connection impact | `connection_impact` | O(s) |
+| 4 Evaluate policy | `evaluate_policy` | O(r) |
+| 5 Filter and rank options | `filter_options` | O(m log m) |
+Each stage appends steps to `decision_trace`, returned by `/api/decisions/analyze`.
 
-## 5. Determinista, IA y humano
-| Paso | Clasificación | Riesgo | Control / fallback |
+## 5. Deterministic, AI and human
+| Step | Classification | Risk | Control / fallback |
 |---|---|---|---|
-| Reconciliar eventos, conexión, reglas y alternativas | Determinista | Datos contradictorios | Jerarquía de fuentes; conflicto no resuelto → humano |
-| Mensaje al pasajero | Determinista (plantilla) | Comunicar algo no validado | Solo hechos del motor; `notify_passenger` rechaza mensajes sin `policy_ref` (422) |
-| Reubicación | Humano o confirmación del pasajero | Costo e incumplimiento de política | Opción candidata, aprobación humana (D-007) e idempotencia |
-| Compensación / reembolso | Humano | Alto costo | Nunca automático |
-No se usa IA en tiempo de ejecución. Las reglas son verificables y la IA agregaría latencia, costo y falta de reproducibilidad sin beneficio para este alcance. Un uso futuro posible sería redactar el texto del mensaje a partir de los campos ya validados, sin acceso a datos personales.
+| Event reconciliation, connection, rules and options | Deterministic | Contradictory data | Source hierarchy; unresolved conflict → human |
+| Passenger message | Deterministic (template) | Communicating something unvalidated | Engine facts only; `notify_passenger` rejects messages without `policy_ref` (422) |
+| Rebooking | Human or passenger confirmation | Cost and policy breach | Candidate option, human approval (D-007) and idempotency |
+| Compensation / refund | Human | High cost | Never automatic |
+No AI is used at runtime. The rules are verifiable, and AI would add latency, cost and non-reproducibility with no benefit for this scope. A possible future use is drafting the message text from already-validated fields, without access to personal data.
 
-## 6. Cómo ejecutar y validar (guía para el profesor)
+## 6. How to run and validate (guide for the reviewer)
 
-### Requisitos previos
-| Requisito | Versión | ¿Obligatorio? |
+### Prerequisites
+| Requirement | Version | Required? |
 |---|---|---|
-| Python | 3.12 o superior (probado con 3.12 en Docker y 3.13) | Sí, si se ejecuta sin Docker |
-| Git | cualquiera | Sí, para clonar |
-| Internet | solo para `pip install` / `docker build` | Sí, la primera vez |
-| Docker Desktop + Docker Compose | Docker 29 / Compose 5 | Opcional (alternativa a Python) |
+| Python | 3.12 or later (tested with 3.12 in Docker and 3.13) | Yes, when running without Docker |
+| Git | any | Yes, to clone |
+| Internet | only for `pip install` / `docker build` | Yes, the first time |
+| Docker Desktop + Docker Compose | Docker 29 / Compose 5 | Optional (alternative to Python) |
 
-**No se necesita** base de datos, claves de API, variables de entorno, servicios externos ni modelos de IA: todos los sistemas externos están simulados con los datos del examen (`backend/app/data/exam_fixtures_abc123.json`).
+**Not needed:** database, API keys, environment variables, external services or AI models — every external system is mocked with the exam data.
 
-Las dependencias de Python se instalan solas desde `backend/requirements.txt`: `fastapi`, `uvicorn`, `pydantic` (v2), `pytest` y `httpx`.
+Python dependencies install automatically: `backend/requirements.txt` (`fastapi`, `uvicorn`, `pydantic` v2, `pytest`, `httpx`) and `frontend/requirements.txt` (`streamlit`, `requests`, `pytest`).
 
-### Opción A — Python (recomendada)
-**Windows (PowerShell):**
+### Option A — Python (recommended)
+**Windows (PowerShell), terminal 1 — backend:**
 ```powershell
 git clone https://github.com/brianoropeza/parcial-algoritmo-y-sistemas.git
 cd parcial-algoritmo-y-sistemas
 py -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt -r frontend\requirements.txt
 cd backend
-..\.venv\Scripts\python.exe -m pytest -q                         # esperado: 27 passed
-..\.venv\Scripts\python.exe -m uvicorn app.main:app --port 8000   # API en http://localhost:8000/docs
+..\.venv\Scripts\python.exe -m pytest -q                         # expected: 27 passed
+..\.venv\Scripts\python.exe -m uvicorn app.main:app --port 8000   # API at http://localhost:8000/docs
+```
+**Terminal 2 — frontend** (with the API running):
+```powershell
+cd parcial-algoritmo-y-sistemas\frontend
+..\.venv\Scripts\python.exe -m pytest -q                         # expected: 27 passed
+..\.venv\Scripts\python.exe -m streamlit run app.py              # http://localhost:8501
 ```
 **Linux / macOS:**
 ```bash
 git clone https://github.com/brianoropeza/parcial-algoritmo-y-sistemas.git
 cd parcial-algoritmo-y-sistemas
-python3 -m venv .venv && .venv/bin/pip install -r backend/requirements.txt
-cd backend
-../.venv/bin/python -m pytest -q
-../.venv/bin/python -m uvicorn app.main:app --port 8000
+python3 -m venv .venv && .venv/bin/pip install -r backend/requirements.txt -r frontend/requirements.txt
+cd backend && ../.venv/bin/python -m pytest -q && ../.venv/bin/python -m uvicorn app.main:app --port 8000
+# second terminal
+cd frontend && ../.venv/bin/python -m pytest -q && ../.venv/bin/python -m streamlit run app.py
 ```
 
-### Opción B — Docker
+### Option B — Docker
 ```bash
 docker compose up --build -d
 docker compose exec backend pytest -q
-# API en http://localhost:8000/docs ; detener con: docker compose down
+docker compose exec frontend pytest -q
+# API at http://localhost:8000/docs · Frontend at http://localhost:8501 ; stop with: docker compose down
 ```
-*Docker no se pudo verificar en el equipo de desarrollo (WSL 2 en instalación); la opción A sí está verificada.*
+*Docker could not be verified on the development machine (WSL 2 still installing); option A is verified.*
 
-### Demostrar la decisión principal
-En `http://localhost:8000/docs`, ejecutar `POST /api/decisions/analyze` con `{"booking_id": "ABC123"}`, o en PowerShell:
+### Demonstrating the main decision
+**Frontend:** open `http://localhost:8501`, enter `ABC123` and click **Check my trip**. The rebooking button is blocked (R5) and **Talk to a person** creates case HC-4471.
+
+**API:** at `http://localhost:8000/docs`, run `POST /api/decisions/analyze` with `{"booking_id": "ABC123"}`, or in PowerShell:
 ```powershell
 Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/decisions/analyze -ContentType "application/json" -Body '{"booking_id":"ABC123"}'
 ```
-Resultado esperado: `classification = DISRUPTION_REVIEW_REQUIRED`, `action_level = HUMAN`, `missed_connections` con S1→S2 (20:35 > 19:05), `applied_rules` R3 y R5, `candidate_options` solo O1, y `decision_trace` con las 5 etapas.
+Expected: `classification = DISRUPTION_REVIEW_REQUIRED`, `action_level = HUMAN`, `missed_connections` S1→S2 (20:35 > 19:05), `applied_rules` R3 and R5, `candidate_options` only O1, and `decision_trace` covering the 5 stages.
 
-| Endpoint | Qué prueba |
+| Endpoint | What it shows |
 |---|---|
-| `GET /api/trips/ABC123` | Reserva con datos personales mínimos; `NOPE` → 404 |
-| `GET /api/trips/ABC123/events` | Eventos de la reserva, incluido el conflicto |
-| `GET /api/trips/ABC123/options` | Alternativas candidatas y descartadas con motivo |
-| `POST /api/actions/rebook` | Sin aprobación → 409; repetido con la misma clave → 409 `DUPLICATE_REQUEST` |
-| `POST /api/actions/escalate` | Crea el caso humano HC-4471 |
+| `GET /api/trips/ABC123` | Booking with minimum personal data; `NOPE` → 404 |
+| `GET /api/trips/ABC123/events` | Booking events, including the conflict |
+| `GET /api/trips/ABC123/options` | Candidate and discarded options with reasons |
+| `POST /api/actions/rebook` | Without approval → 409; repeated with the same key → 409 `DUPLICATE_REQUEST` |
+| `POST /api/actions/escalate` | Creates human case HC-4471 |
 
-**Validación:** 27 pruebas automatizadas pasan (caso base, fuente degradada, conflicto entre fuentes confiables, conexión perdida, reglas, filtro de alternativas, aprobación humana, idempotencia, escalamiento, 404, notificación sin `policy_ref`, datos personales).
+**Validation:** 27 backend tests (base case, degraded source, conflict between trusted sources, missed connection, rules, option filtering, human approval, idempotency, escalation, 404, notification without `policy_ref`, personal data) and 27 frontend tests (input validation, personal-data allow-list, HTTP error handling, rendering of the real backend response). Integration verified with both services running.
 
-## 7. Riesgos, limitaciones y próximos pasos
-- `approved_case_id` no se verifica contra un sistema real de aprobaciones. Próximo paso: un registro de casos aprobados.
-- Idempotencia en memoria; se pierde al reiniciar. Próximo paso: persistencia.
-- No se maneja todavía `503 UPSTREAM_TIMEOUT`; la estrategia propuesta es reintentar con la misma clave.
-- No se verifica el TTL de las alternativas (120 s).
-- La correspondencia aeropuerto → país está fija en el código para la condición `international`.
-- Docker no se ha verificado en el equipo de desarrollo.
+## 7. Risks, limitations and next steps
+- `approved_case_id` is not verified against a real approval system. Next step: a registry of approved cases.
+- Idempotency is stored in memory and lost on restart. Next step: persistence.
+- `503 UPSTREAM_TIMEOUT` is not handled yet in the backend; proposed strategy: retry with the same key (the frontend already treats it as indeterminate and does not retry).
+- The 120 s option TTL is not enforced.
+- The airport → country mapping used for the `international` condition is hard-coded.
+- No passenger authentication; the booking code alone is enough to look up a trip.
+- Docker has not been verified on the development machine.
 
-## 8. Consulta ambigua o compleja (tarea 5.2)
-**Ejemplo:** *"¿Me cancelaron el vuelo? ¿Me pagan hotel en Lima con mi hijo?"*
-1. **Interpretar (asistido por IA, opcional):** clasificar el texto libre en intenciones cerradas (`STATUS`, `ENTITLEMENT:HOTEL`). La salida se valida contra esa lista; si no coincide, se pide aclarar. El modelo solo recibe el texto, nunca datos personales.
-2. **Recuperar contexto (determinista):** `get_trip_context`, `get_operational_events`, `get_policy_rules('DELAY')` y `get_eligible_options`.
-3. **Resolver (determinista):** no existe evento `CANCELLATION`; OPS_CORE informa un retraso → se responde "retrasado, no cancelado". Ninguna regla de POL-DELAY-2026-03 otorga hotel → no se promete.
-4. **Detenerse y escalar (humano):** hotel no cubierto, menor en el grupo (R5) y noche en Lima → `create_human_case` con la traza como evidencia. Al pasajero solo se le comunica lo validado, con `policy_ref`.
-No se usa un agente: las herramientas y su orden son fijos. Un agente añadiría riesgo de acciones no autorizadas sin ningún beneficio.
+## 8. Ambiguous or complex query (task 5.2)
+**Example:** *"Was my flight cancelled? Will you pay for a hotel in Lima for me and my son?"*
+1. **Interpret (AI-assisted, optional):** classify free text into closed intents (`STATUS`, `ENTITLEMENT:HOTEL`). The output is validated against that list; if it does not match, the system asks for clarification. The model receives only the text, never personal data.
+2. **Retrieve context (deterministic):** `get_trip_context`, `get_operational_events`, `get_policy_rules('DELAY')` and `get_eligible_options`.
+3. **Resolve (deterministic):** there is no `CANCELLATION` event; OPS_CORE reports a delay → answer "delayed, not cancelled". No rule in POL-DELAY-2026-03 grants a hotel → nothing is promised.
+4. **Stop and escalate (human):** hotel not covered, minor in the group (R5) and an overnight stay in Lima → `create_human_case` with the trace as evidence. The passenger only receives validated content, with `policy_ref`.
+No agent is used: the tools and their order are fixed. An agent would add the risk of unauthorized actions with no benefit.
