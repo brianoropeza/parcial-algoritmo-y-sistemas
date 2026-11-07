@@ -20,7 +20,7 @@ paths:
           required: true
           schema: {type: string}
       responses:
-        '200': {description: Booking context, content: {application/json: {schema: {type: object}}}}
+        '200': {description: Booking context (datos personales mínimos, D-006), content: {application/json: {schema: {$ref: '#/components/schemas/TripPublic'}}}}
         '404': {description: Unknown booking}
   /api/trips/{booking_id}/events:
     get:
@@ -57,13 +57,74 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/Decision'}
         '404': {description: Unknown booking}
+  /api/trips/{booking_id}/options:
+    get:
+      operationId: getTripOptions
+      parameters:
+        - {name: booking_id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: 'Candidate options (not confirmed) and discarded options with reasons'}
+        '404': {description: Unknown booking}
+  /api/actions/escalate:
+    post:
+      operationId: escalateToHuman
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, required: [booking_id], properties: {booking_id: {type: string}, reason: {type: string}}}
+      responses:
+        '201': {description: 'Human case created (case_id, queue, sla_minutes)'}
+        '404': {description: Unknown booking}
   /api/actions/rebook:
     post:
       operationId: requestRebooking
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [booking_id, option_id, idempotency_key]
+              properties:
+                booking_id: {type: string}
+                option_id: {type: string}
+                idempotency_key: {type: string, minLength: 8}
+                approved_case_id: {type: [string, 'null']}
       responses:
-        '409': {description: Rebooking unavailable until verification}
+        '201': {description: 'Rebooking request PENDING_CONFIRMATION'}
+        '409': {description: 'HUMAN_APPROVAL_REQUIRED, OPTION_NOT_ELIGIBLE, DUPLICATE_REQUEST or missing body'}
+        '404': {description: Unknown booking}
 components:
   schemas:
+    TripPublic:
+      type: object
+      required: [booking_id, passengers, segments, fare_conditions, missing_fields]
+      properties:
+        booking_id: {type: string}
+        passengers:
+          type: array
+          items:
+            type: object
+            required: [passenger_id, name, type]
+            properties:
+              passenger_id: {type: string}
+              name: {type: string}
+              type: {type: string, enum: [ADULT, CHILD]}
+        segments:
+          type: array
+          items:
+            type: object
+            properties:
+              segment_id: {type: string}
+              flight_number: {type: string}
+              origin: {type: string}
+              destination: {type: string}
+              date: {type: string, format: date}
+              scheduled_departure: {type: string, description: 'Hora local HH:MM'}
+              scheduled_arrival: {type: string, description: 'Hora local HH:MM'}
+        fare_conditions: {type: object}
+        completeness: {type: [string, 'null']}
+        missing_fields: {type: array, items: {type: string}}
     Evidence:
       type: object
       required: [event_id, segment_id, type, source, recorded_at]
@@ -75,12 +136,14 @@ components:
         recorded_at: {type: string}
         delay_minutes: {type: [integer, 'null']}
         status: {type: [string, 'null']}
+        new_departure: {type: [string, 'null'], description: 'Hora local HH:MM (examen)'}
+        gate: {type: [string, 'null']}
     Decision:
       type: object
       required: [booking_id, classification, recommendation, requires_human_review, can_auto_rebook, evidence, warnings, analyzed_at]
       properties:
         booking_id: {type: string}
-        classification: {type: string}
+        classification: {type: string, enum: [DISRUPTION_REVIEW_REQUIRED, DISRUPTION_DETECTED, NO_DISRUPTION_CONFIRMED]}
         recommendation: {type: string}
         requires_human_review: {type: boolean}
         can_auto_rebook: {type: boolean}
@@ -92,3 +155,14 @@ components:
           items: {type: string}
         policy_ref: {type: [string, 'null']}
         analyzed_at: {type: string, format: date-time}
+        action_level: {type: [string, 'null'], enum: [AUTOMATIC, AUTOMATIC_WITH_CONFIRMATION, HUMAN, null]}
+        relevant_modification: {type: [boolean, 'null']}
+        human_review_reasons: {type: array, items: {type: string}}
+        missed_connections: {type: array, items: {type: object}}
+        applied_rules: {type: array, items: {type: object}}
+        entitlements: {type: array, items: {type: string}}
+        candidate_options: {type: array, items: {type: object}}
+        discarded_options: {type: array, items: {type: object}}
+        segments: {type: array, items: {type: object}}
+        passenger_message: {type: [object, 'null']}
+        decision_trace: {type: array, items: {type: object}}
