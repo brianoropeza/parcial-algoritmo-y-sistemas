@@ -1,0 +1,244 @@
+{
+ "trip": {
+  "booking_id": "ABC123",
+  "passengers": [
+   {
+    "passenger_id": "P1",
+    "name": "María Silva",
+    "type": "ADULT"
+   },
+   {
+    "passenger_id": "P2",
+    "name": "Tomás Silva",
+    "type": "CHILD"
+   }
+  ],
+  "segments": [
+   {
+    "segment_id": "S1",
+    "flight_number": "NB500",
+    "origin": "SCL",
+    "destination": "LIM",
+    "date": "2026-09-15",
+    "scheduled_departure": "14:30",
+    "scheduled_arrival": "17:55"
+   },
+   {
+    "segment_id": "S2",
+    "flight_number": "NB2410",
+    "origin": "LIM",
+    "destination": "MEX",
+    "date": "2026-09-15",
+    "scheduled_departure": "19:05",
+    "scheduled_arrival": "23:40"
+   }
+  ],
+  "fare_conditions": {
+   "changeable": true,
+   "refundable": false,
+   "fare_family": "LIGHT"
+  },
+  "completeness": "PARTIAL",
+  "missing_fields": [
+   "fare_conditions.change_penalty_amount"
+  ]
+ },
+ "decision": {
+  "booking_id": "ABC123",
+  "classification": "DISRUPTION_REVIEW_REQUIRED",
+  "recommendation": "Show the explanation and candidate options; a human agent must approve any rebooking (D-007).",
+  "requires_human_review": true,
+  "can_auto_rebook": false,
+  "evidence": [
+   {
+    "event_id": "E-1012",
+    "segment_id": "S1",
+    "type": "STATUS",
+    "status": "ON_TIME",
+    "source": "LEGACY_MIRROR",
+    "recorded_at": "2026-09-15T09:30:00Z"
+   },
+   {
+    "event_id": "E-1001",
+    "segment_id": "S1",
+    "type": "DELAY",
+    "new_departure": "17:10",
+    "delay_minutes": 160,
+    "source": "OPS_CORE",
+    "recorded_at": "2026-09-15T10:48:00Z"
+   },
+   {
+    "event_id": "E-1007",
+    "segment_id": "S1",
+    "type": "GATE_CHANGE",
+    "gate": "24",
+    "source": "AIRPORT_FEED",
+    "recorded_at": "2026-09-15T10:55:00Z"
+   },
+   {
+    "event_id": "E-2003",
+    "segment_id": "S2",
+    "type": "STATUS",
+    "status": "SCHEDULED",
+    "source": "OPS_CORE",
+    "recorded_at": "2026-09-15T10:48:00Z"
+   }
+  ],
+  "warnings": [
+   "Operational sources disagree about segment S1 (resolved by trust: E-1001)",
+   "Missing field: fare_conditions.change_penalty_amount"
+  ],
+  "policy_ref": "POL-DELAY-2026-03",
+  "analyzed_at": "2026-11-06T00:00:00+00:00",
+  "action_level": "HUMAN",
+  "relevant_modification": true,
+  "human_review_reasons": [
+   "R5 PRIORITY_HANDLING requires human approval"
+  ],
+  "missed_connections": [
+   {
+    "from_segment": "S1",
+    "to_segment": "S2",
+    "estimated_arrival": "2026-09-15 20:35",
+    "next_departure": "2026-09-15 19:05"
+   }
+  ],
+  "applied_rules": [
+   {
+    "rule_id": "R3",
+    "entitlement": "REBOOK_NO_FEE",
+    "requires_human_approval": false
+   },
+   {
+    "rule_id": "R5",
+    "entitlement": "PRIORITY_HANDLING",
+    "requires_human_approval": true
+   }
+  ],
+  "entitlements": [
+   "PRIORITY_HANDLING",
+   "REBOOK_NO_FEE"
+  ],
+  "candidate_options": [
+   {
+    "option_id": "O1",
+    "type": "REBOOK",
+    "flight_number": "NB2412",
+    "origin": "LIM",
+    "destination": "MEX",
+    "date": "2026-09-16",
+    "departure": "08:15",
+    "fare_difference": 0,
+    "seats_available": 4,
+    "policy_ref": "POL-DELAY-2026-03",
+    "confidence": "HIGH"
+   }
+  ],
+  "discarded_options": [
+   {
+    "option_id": "O2",
+    "reasons": [
+     "seats_available 1 < passengers 2",
+     "fare_difference > 0 contradicts REBOOK_NO_FEE"
+    ]
+   },
+   {
+    "option_id": "O3",
+    "reasons": [
+     "policy POL-REFUND-2026-01 not retrieved/verified",
+     "confidence LOW"
+    ]
+   }
+  ],
+  "segments": [
+   {
+    "segment_id": "S1",
+    "state": "DELAYED",
+    "prevailing_event": "E-1001",
+    "delay_minutes": 160,
+    "conflict_detected": true,
+    "unresolved_conflict": false,
+    "discarded": [
+     {
+      "event_id": "E-1012",
+      "reason": "source LEGACY_MIRROR is degraded"
+     }
+    ],
+    "informational": [
+     "E-1007"
+    ]
+   },
+   {
+    "segment_id": "S2",
+    "state": "ON_TIME",
+    "prevailing_event": "E-2003",
+    "delay_minutes": null,
+    "conflict_detected": false,
+    "unresolved_conflict": false,
+    "discarded": [],
+    "informational": []
+   }
+  ],
+  "passenger_message": {
+   "booking_id": "ABC123",
+   "policy_ref": "POL-DELAY-2026-03",
+   "text": "Your flight segment S1 is delayed; estimated arrival 2026-09-15 20:35 is after your connection departure 2026-09-15 19:05. Candidate alternative (not yet confirmed): flight NB2412 on 2026-09-16 at 08:15. An agent will review your case before any change to your booking.",
+   "validated": true
+  },
+  "decision_trace": [
+   {
+    "stage": "reconcile",
+    "segment_id": "S1",
+    "rule": "D-003",
+    "detail": "state=DELAYED prevailing=E-1001 conflict=True unresolved=False discarded=['E-1012']"
+   },
+   {
+    "stage": "reconcile",
+    "segment_id": "S2",
+    "rule": "D-003",
+    "detail": "state=ON_TIME prevailing=E-2003 conflict=False unresolved=False discarded=[]"
+   },
+   {
+    "stage": "impact",
+    "segment_id": "S1",
+    "rule": "D-004/D-008",
+    "detail": "estimated_arrival=2026-09-15 20:35 next_departure=2026-09-15 19:05 missed=True"
+   },
+   {
+    "stage": "policy",
+    "rule": "POL-DELAY-2026-03/R1",
+    "detail": "delay_minutes >= 180 -> False"
+   },
+   {
+    "stage": "policy",
+    "rule": "POL-DELAY-2026-03/R2",
+    "detail": "delay_minutes >= 240 AND international -> False"
+   },
+   {
+    "stage": "policy",
+    "rule": "POL-DELAY-2026-03/R3",
+    "detail": "missed_connection == true -> True"
+   },
+   {
+    "stage": "policy",
+    "rule": "POL-DELAY-2026-03/R4",
+    "detail": "compensation_requested == true -> False"
+   },
+   {
+    "stage": "policy",
+    "rule": "POL-DELAY-2026-03/R5",
+    "detail": "group_includes_minor == true -> True"
+   },
+   {
+    "stage": "options",
+    "rule": "D-009",
+    "detail": "candidates=['O1'] discarded=['O2', 'O3']"
+   },
+   {
+    "stage": "classify",
+    "rule": "D-005/D-007",
+    "detail": "relevant=True level=HUMAN reasons=['R5 PRIORITY_HANDLING requires human approval']"
+   }
+  ]
+ }
+}
