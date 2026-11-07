@@ -20,7 +20,7 @@ paths:
           required: true
           schema: {type: string}
       responses:
-        '200': {description: Booking context, content: {application/json: {schema: {type: object}}}}
+        '200': {description: Booking context (datos personales mínimos, D-006), content: {application/json: {schema: {$ref: '#/components/schemas/TripPublic'}}}}
         '404': {description: Unknown booking}
   /api/trips/{booking_id}/events:
     get:
@@ -64,6 +64,35 @@ paths:
         '409': {description: Rebooking unavailable until verification}
 components:
   schemas:
+    TripPublic:
+      type: object
+      required: [booking_id, passengers, segments, fare_conditions, missing_fields]
+      properties:
+        booking_id: {type: string}
+        passengers:
+          type: array
+          items:
+            type: object
+            required: [passenger_id, name, type]
+            properties:
+              passenger_id: {type: string}
+              name: {type: string}
+              type: {type: string, enum: [ADULT, CHILD]}
+        segments:
+          type: array
+          items:
+            type: object
+            properties:
+              segment_id: {type: string}
+              flight_number: {type: string}
+              origin: {type: string}
+              destination: {type: string}
+              date: {type: string, format: date}
+              scheduled_departure: {type: string, description: 'Hora local HH:MM'}
+              scheduled_arrival: {type: string, description: 'Hora local HH:MM'}
+        fare_conditions: {type: object}
+        completeness: {type: [string, 'null']}
+        missing_fields: {type: array, items: {type: string}}
     Evidence:
       type: object
       required: [event_id, segment_id, type, source, recorded_at]
@@ -75,6 +104,8 @@ components:
         recorded_at: {type: string}
         delay_minutes: {type: [integer, 'null']}
         status: {type: [string, 'null']}
+        new_departure: {type: [string, 'null'], description: 'Hora local HH:MM (examen)'}
+        gate: {type: [string, 'null']}
     Decision:
       type: object
       required: [booking_id, classification, recommendation, requires_human_review, can_auto_rebook, evidence, warnings, analyzed_at]

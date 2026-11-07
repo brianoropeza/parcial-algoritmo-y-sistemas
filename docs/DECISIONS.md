@@ -11,6 +11,10 @@ Estados posibles: Propuesta · Aprobada · Rechazada · Reemplazada.
 | D-003 | Jerarquía de confianza de fuentes operacionales | Aprobada |
 | D-004 | Regla de conexión perdida | Aprobada |
 | D-005 | Niveles de automatización | Aprobada |
+| D-006 | Exposición mínima de datos personales | Aprobada |
+| D-007 | Alcance de las reglas con aprobación humana (R5) | Aprobada |
+| D-008 | Cálculo de la llegada estimada | Aprobada |
+| D-009 | Filtro y orden de alternativas | Aprobada |
 
 ---
 
@@ -71,6 +75,7 @@ Estados posibles: Propuesta · Aprobada · Rechazada · Reemplazada.
   - **Fuente degradada:** no puede prevalecer. Se conserva como evidencia y se informa como descartada en la traza.
   - **Contradicción entre fuentes no degradadas:** si dos fuentes no degradadas se contradicen sobre el estado del mismo segmento, el caso se escala a un humano.
   - **Prioridad de los datos del examen:** si el examen define niveles de confiabilidad por evento, se usan esos valores en lugar de este orden. Esta decisión se actualizará cuando se verifiquen los datos.
+- **Verificación con el examen (2026-11-06):** El examen no trae un nivel de confiabilidad por evento. La degradación de una fuente se informa en `get_operational_events._meta.sources_degraded` (`["LEGACY_MIRROR"]`). El orden de esta decisión se mantiene. Además, el evento de LEGACY_MIRROR (E-1012, 09:30Z) es más antiguo que el de OPS_CORE (E-1001, 10:48Z).
 - **Consecuencias:** Para ABC123, el retraso de OPS_CORE prevalece y el `ON_TIME` de LEGACY_MIRROR queda registrado como contradicción con una fuente degradada.
 - **Uso de IA:** La propuesta fue hecha con Claude. La aprobó Brian.
 
@@ -106,9 +111,69 @@ Estados posibles: Propuesta · Aprobada · Rechazada · Reemplazada.
 
 ---
 
+## D-006 — Exposición mínima de datos personales
+
+- **Estado:** Aprobada
+- **Fecha:** 2026-11-06 · **Aprobó:** Brian (backend)
+- **Contexto:** `get_trip_context` del examen devuelve email, teléfono, documento y `loyalty_tier` de María, y la edad de Tomás. Restricción 4 del examen: proteger datos personales con mínimo privilegio.
+- **Decisión:**
+  - El mock conserva literalmente los datos del examen, para respetar el contrato.
+  - La API devuelve por pasajero solo `passenger_id`, `name` y `type`.
+  - La API nunca devuelve email, teléfono, `document_id`, `loyalty_tier` ni edad. La condición de menor se deduce de `type: CHILD`.
+  - Estos datos tampoco se envían a ningún modelo de IA.
+- **Consecuencias:** `GET /api/trips/{booking_id}` cambia su forma: las fechas y horas de los segmentos quedan separadas, como en el examen, y se agregan `missing_fields` y `completeness`. El contrato se documentó como `TripPublic`. Hay que avisar al frontend.
+- **Uso de IA:** La propuesta fue hecha con Claude. La aprobó Brian. La verifica la prueba `test_trip_endpoint_exposes_minimum_personal_data`.
+
+---
+
+## D-007 — Alcance de las reglas con aprobación humana (R5)
+
+- **Estado:** Aprobada
+- **Fecha:** 2026-11-06 · **Aprobó:** Brian (backend)
+- **Contexto:** En ABC123 aplican R3 (`missed_connection` → `REBOOK_NO_FEE`, sin aprobación humana) y R5 (`group_includes_minor` → `PRIORITY_HANDLING`, con aprobación humana). La alternativa O1 implica pasar la noche en Lima con un menor, y ninguna regla de la política cubre el hotel.
+- **Opciones evaluadas:**
+  - **A.** La aprobación humana aplica solo al manejo prioritario. El pasajero podría solicitar O1 por sí mismo.
+  - **B.** Si alguna regla aplicable exige aprobación humana, toda acción de alto impacto del caso pasa por una persona.
+- **Decisión:** Opción B. El sistema explica, muestra las alternativas candidatas y crea el caso humano con la evidencia. La reubicación queda pendiente de aprobación.
+- **Consecuencias:** Es más conservadora: en este caso un operador interviene, con un SLA de 45 minutos según el examen. Evita prometer hotel o comida que la política no cubre.
+- **Uso de IA:** Claude propuso las opciones. Brian eligió B.
+
+---
+
+## D-008 — Cálculo de la llegada estimada
+
+- **Estado:** Aprobada
+- **Fecha:** 2026-11-06 · **Aprobó:** Brian (backend)
+- **Contexto:** El evento de retraso trae `new_departure` y `delay_minutes`, pero no la nueva hora de llegada. Las horas son locales (SCL y LIM están en zonas horarias distintas).
+- **Decisión:** `llegada_estimada = scheduled_arrival + delay_minutes`, en la hora local del aeropuerto de llegada. Se compara con la salida del siguiente segmento, que está en el mismo aeropuerto y la misma zona horaria.
+- **Supuesto documentado:** la duración del vuelo no cambia.
+- **Consecuencias:** Para S1: 17:55 + 160 min = 20:35 en LIM, después de las 19:05 → conexión perdida (D-004).
+- **Uso de IA:** La propuesta fue hecha con Claude. La aprobó Brian.
+
+---
+
+## D-009 — Filtro y orden de alternativas
+
+- **Estado:** Aprobada
+- **Fecha:** 2026-11-06 · **Aprobó:** Brian (backend)
+- **Contexto:** `get_eligible_options` entrega alternativas candidatas, no decisiones. Tienen un `ttl_seconds` de 120.
+- **Decisión:** Una alternativa se descarta si:
+  1. tiene menos asientos (`seats_available`) que pasajeros;
+  2. tiene `fare_difference > 0` cuando el derecho aplicable es `REBOOK_NO_FEE`;
+  3. su `policy_ref` no corresponde a una política consultada y vigente;
+  4. su `confidence` es `LOW`.
+
+  Las restantes se ordenan por confianza (HIGH > MEDIUM), luego por diferencia de tarifa y luego por hora de llegada. Si pasó el TTL, las alternativas se vuelven a consultar antes de cualquier reubicación.
+- **Consecuencias para ABC123:**
+  - **O1:** candidata.
+  - **O2:** descartada por las condiciones 1 y 2.
+  - **O3:** descartada por las condiciones 3 y 4. Además, la tarifa no es reembolsable.
+- **Uso de IA:** La propuesta fue hecha con Claude. La aprobó Brian.
+
+---
+
 ## Pendientes que generarán nuevas decisiones
 
-- Datos exactos del examen para alternativas, políticas y confiabilidad de eventos (afectan a D-003, D-005 y a la etapa 5 de D-002).
-- Revisar si `age: 7` y `fare_family: 'LIGHT'` del fixture actual aparecen en el examen. Si no aparecen, se eliminan para no inventar datos.
 - Ampliación del contrato OpenAPI (`decision_trace`, `options`, `escalate`), a coordinar con el frontend.
-- Acceso mínimo a datos personales en `GET /api/trips/{booking_id}`.
+- Manejo de `503 UPSTREAM_TIMEOUT` (resultado indeterminado) en `create_rebooking_request`: reintentar con la misma clave de idempotencia.
+- Contenido mínimo validado de `notify_passenger` (el examen rechaza mensajes sin `policy_ref`).
