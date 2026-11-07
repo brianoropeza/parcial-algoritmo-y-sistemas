@@ -15,6 +15,11 @@ Estados posibles: Propuesta · Aprobada · Rechazada · Reemplazada.
 | D-007 | Alcance de las reglas con aprobación humana (R5) | Aprobada |
 | D-008 | Cálculo de la llegada estimada | Aprobada |
 | D-009 | Filtro y orden de alternativas | Aprobada |
+| D-010 | Semántica de estados y conflictos de eventos | Implementada · aprobada en bloque |
+| D-011 | Evaluación segura de condiciones de política | Implementada · aprobada en bloque |
+| D-012 | Control de la reubicación (rebook) | Implementada · aprobada en bloque |
+| D-013 | Sin IA en tiempo de ejecución; mensaje por plantilla | Implementada · aprobada en bloque |
+| D-014 | Ampliación aditiva del contrato OpenAPI | Implementada · aprobada en bloque |
 
 ---
 
@@ -172,8 +177,74 @@ Estados posibles: Propuesta · Aprobada · Rechazada · Reemplazada.
 
 ---
 
+## Decisiones D-010 a D-014 — contexto común
+
+- **Fecha:** 2026-11-06 · **Aprobó:** Brian, en bloque ("avanzar con todo"), con 25 minutos restantes del examen.
+- Estas decisiones las propuso e implementó Claude al construir las etapas 2 a 5. Quedan cubiertas por las pruebas de `backend/tests/test_engine.py`, pero no se discutieron una por una. Se registran para mantener la trazabilidad.
+
+---
+
+## D-010 — Semántica de estados y conflictos de eventos
+
+- **Decisión:**
+  - Cada evento afirma un estado: `DELAY` → `DELAYED`, `CANCELLATION` → `CANCELLED`, `STATUS ON_TIME`/`SCHEDULED` → `ON_TIME`.
+  - `GATE_CHANGE` es informativo y no afirma estado.
+  - Dentro de una misma fuente prevalece su registro más reciente. Entre fuentes distintas prevalece la de mayor confianza (D-003), no el registro más reciente.
+  - Hay conflicto si los eventos afirman estados distintos. Es un conflicto sin resolver si la contradicción es entre fuentes no degradadas, y entonces el caso va a un humano.
+- **Alternativa descartada:** que el último dato gane siempre, porque permitiría que una fuente degradada se imponga.
+- **Verificación:** `test_degraded_source_does_not_prevail` y `test_conflict_between_trusted_sources_is_unresolved`.
+
+---
+
+## D-011 — Evaluación segura de condiciones de política
+
+- **Decisión:** Las condiciones (`delay_minutes >= 180`, `... AND international`) se interpretan con un analizador propio que solo acepta comparaciones y `AND`. No se usa `eval`. Si un dato falta, la regla no se activa: no se inventan datos.
+- **Supuesto:** `international` se calcula con una tabla fija de aeropuerto a país (SCL→CL, LIM→PE, MEX→MX). `compensation_requested` vale `false`, porque el pasajero no la ha solicitado.
+- **Alternativa descartada:** usar `eval()`, porque permitiría ejecutar código a partir de los datos de política.
+- **Verificación:** `test_policy_rules_applied_are_identifiable` y `test_missing_fact_never_activates_rule`.
+
+---
+
+## D-012 — Control de la reubicación (rebook)
+
+- **Decisión:** `POST /api/actions/rebook` exige `booking_id`, `option_id` e `idempotency_key` (mínimo 8 caracteres). El motor se vuelve a ejecutar antes de cada solicitud. La solicitud se rechaza con 409 en estos casos:
+  - la opción no es candidata (`OPTION_NOT_ELIGIBLE`);
+  - el caso requiere aprobación humana y no se envía `approved_case_id` (`HUMAN_APPROVAL_REQUIRED`);
+  - la clave de idempotencia ya se usó (`DUPLICATE_REQUEST`, con el mismo `request_id`, como en el examen).
+- **Limitaciones aceptadas:**
+  - `approved_case_id` no se verifica contra un sistema real.
+  - La idempotencia se guarda en memoria.
+  - No se maneja todavía el `503` (resultado indeterminado).
+- **Verificación:** `test_rebook_without_human_approval_rejected`, `test_rebook_ineligible_option_rejected` y `test_rebook_is_idempotent`.
+
+---
+
+## D-013 — Sin IA en tiempo de ejecución; mensaje por plantilla
+
+- **Decisión:**
+  - El mensaje al pasajero se arma con una plantilla y solo con hechos producidos por el motor. Incluye siempre `policy_ref` y nunca datos personales.
+  - Antes de devolver el mensaje se valida con `notify_passenger`, que responde 422 si falta `policy_ref`.
+  - Para la consulta ambigua (README, sección 8), la IA queda como opción futura y solo para clasificar intenciones cerradas.
+- **Alternativa descartada:** que un modelo redacte el mensaje (riesgo de comunicar información no validada, latencia y costo).
+- **Verificación:** `test_passenger_message_validated_and_without_personal_data` y `test_notification_without_policy_ref_rejected`.
+
+---
+
+## D-014 — Ampliación aditiva del contrato OpenAPI
+
+- **Decisión:**
+  - Se agregan a `Decision` campos opcionales: `action_level`, `relevant_modification`, `human_review_reasons`, `missed_connections`, `applied_rules`, `entitlements`, `candidate_options`, `discarded_options`, `segments`, `passenger_message` y `decision_trace`.
+  - Se agrega el valor `DISRUPTION_DETECTED` a `classification`.
+  - Se documentan `options`, `escalate` y el cuerpo de `rebook`.
+  - No se elimina ningún campo existente.
+- **Impacto en el frontend:** los cambios son compatibles. El único cambio de forma está en `GET /api/trips/{id}` (D-006). **Pendiente:** revisión con el desarrollador frontend (Diego Triana).
+
+---
+
 ## Pendientes que generarán nuevas decisiones
 
-- Ampliación del contrato OpenAPI (`decision_trace`, `options`, `escalate`), a coordinar con el frontend.
-- Manejo de `503 UPSTREAM_TIMEOUT` (resultado indeterminado) en `create_rebooking_request`: reintentar con la misma clave de idempotencia.
-- Contenido mínimo validado de `notify_passenger` (el examen rechaza mensajes sin `policy_ref`).
+- Revisión del contrato ampliado con el frontend (D-014).
+- Manejo de `503 UPSTREAM_TIMEOUT` en `create_rebooking_request`: reintentar con la misma clave (D-012).
+- Verificación real de `approved_case_id` y persistencia de la idempotencia (D-012).
+- Control del TTL de 120 s de las alternativas (D-009).
+- Verificación de la ejecución con Docker (WSL 2 pendiente).
