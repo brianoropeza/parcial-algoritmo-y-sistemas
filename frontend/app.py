@@ -74,7 +74,7 @@ if trip:
             [{"Flight": s.get("flight_number"), "Route": f"{s.get('origin')} → {s.get('destination')}",
               "Date": s.get("date", "—"), "Departure": s.get("scheduled_departure", "—"),
               "Arrival": s.get("scheduled_arrival", "—")} for s in trip["segments"]],
-            hide_index=True, use_container_width=True)
+            hide_index=True, width="stretch")
     if trip["completeness"] == "PARTIAL":
         st.caption("ℹ️ Some of your booking information is not available yet"
                    + (f" ({', '.join(trip['missing_fields'])})." if trip["missing_fields"] else "."))
@@ -94,7 +94,7 @@ if view:
         st.warning(w)
 
     with st.expander("See the information this is based on"):
-        st.dataframe(view["evidence"], hide_index=True, use_container_width=True)
+        st.dataframe(view["evidence"], hide_index=True, width="stretch")
         if view["analyzed_at"]:
             st.caption(f"Analyzed at: {view['analyzed_at']}")
 

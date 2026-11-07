@@ -20,6 +20,7 @@ Estados posibles: Propuesta · Aprobada · Rechazada · Reemplazada.
 | D-012 | Control de la reubicación (rebook) | Implementada · aprobada en bloque |
 | D-013 | Sin IA en tiempo de ejecución; mensaje por plantilla | Implementada · aprobada en bloque |
 | D-014 | Ampliación aditiva del contrato OpenAPI | Implementada · aprobada en bloque |
+| D-015 | Ejecución con un solo comando y compatibilidad con Python 3.14 | Aprobada |
 
 ---
 
@@ -238,6 +239,27 @@ Estados posibles: Propuesta · Aprobada · Rechazada · Reemplazada.
   - Se documentan `options`, `escalate` y el cuerpo de `rebook`.
   - No se elimina ningún campo existente.
 - **Impacto en el frontend:** los cambios son compatibles. El único cambio de forma está en `GET /api/trips/{id}` (D-006). **Pendiente:** revisión con el desarrollador frontend (Diego Triana).
+
+---
+
+## D-015 — Ejecución con un solo comando y compatibilidad con Python 3.14
+
+- **Estado:** Aprobada
+- **Fecha:** 2026-11-06 · **Aprobó:** Brian (backend), con conocimiento del frontend
+- **Contexto:**
+  - Al probar en Windows con Python 3.14, `streamlit==1.39.0` no se pudo instalar: depende de una versión de Pillow sin paquetes para 3.14.
+  - Además, hacían falta dos terminales para ejecutar el sistema.
+  - Docker no está disponible en el equipo de desarrollo.
+- **Opciones evaluadas:**
+  - Scripts `.ps1` o `.cmd`: no son portables, y PowerShell bloquea los `.ps1`.
+  - Exigir Docker: no está verificado.
+  - Un lanzador en Python (`run.py`).
+- **Decisión:**
+  - `run.py` en la raíz: con un solo comando crea `.venv`, instala las dependencias y levanta el backend y el frontend. Ctrl+C detiene ambos. `--test` ejecuta las dos suites de pruebas.
+  - `frontend/requirements.txt` pasa a `streamlit>=1.50,<2`, y `use_container_width` se reemplaza por `width="stretch"`, porque el parámetro anterior está obsoleto.
+  - El texto de `recommendation` de `analyze` se redacta para el pasajero, sin referencias internas como "D-007".
+- **Verificación:** `run.py --test` desde un entorno limpio (27 + 27 pruebas) y arranque y apagado completos en Linux. En Windows con Python 3.14, Brian verificó la pantalla con ABC123.
+- **Uso de IA:** La propuesta e implementación son de Claude; la aprobó Brian.
 
 ---
 

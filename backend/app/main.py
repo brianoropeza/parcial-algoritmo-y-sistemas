@@ -128,11 +128,11 @@ def analyze(req: AnalyzeRequest):
 
     human = r['action_level'] == 'HUMAN'
     if human:
-        classification, rec = 'DISRUPTION_REVIEW_REQUIRED', 'Show the explanation and candidate options; a human agent must approve any rebooking (D-007).'
+        classification, rec = 'DISRUPTION_REVIEW_REQUIRED', 'We have found a rebooking option for you. An agent will review your case and approve the change before your booking is modified.'
     elif r['relevant_modification']:
-        classification, rec = 'DISRUPTION_DETECTED', 'Offer the candidate options; rebook only after passenger confirmation.'
+        classification, rec = 'DISRUPTION_DETECTED', 'You can choose one of the options below; we will only change your booking after you confirm it.'
     else:
-        classification, rec = 'NO_DISRUPTION_CONFIRMED', 'Inform the passenger; no action needed.'
+        classification, rec = 'NO_DISRUPTION_CONFIRMED', 'No action is needed on your part.'
 
     msg = passenger_message(req.booking_id, r, policy_ref)
     status, _ = notify_passenger(msg)  # validación previa: el mock rechaza mensajes sin policy_ref

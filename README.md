@@ -45,44 +45,43 @@ No AI is used at runtime. The rules are verifiable, and AI would add latency, co
 
 ## 6. How to run and validate (guide for the reviewer)
 
+### Quick start — one command
+Requires only **Python 3.12 or later** (tested with 3.12, 3.13 and 3.14) and Git.
+```powershell
+git clone https://github.com/brianoropeza/parcial-algoritmo-y-sistemas.git
+cd parcial-algoritmo-y-sistemas
+py run.py              # Windows  (Linux / macOS: python3 run.py)
+```
+`run.py` creates a local `.venv` the first time, installs all dependencies, starts the backend and the frontend, and opens the browser at `http://localhost:8501`. **Ctrl+C stops both.**
+
+To run every automated test (backend and frontend) with one command:
+```powershell
+py run.py --test       # expected: 27 passed (backend) + 27 passed (frontend)
+```
+Other options: `--no-install` (skip dependency installation), `--no-browser`.
+
 ### Prerequisites
 | Requirement | Version | Required? |
 |---|---|---|
-| Python | 3.12 or later (tested with 3.12 in Docker and 3.13) | Yes, when running without Docker |
+| Python | 3.12 or later | Yes |
 | Git | any | Yes, to clone |
-| Internet | only for `pip install` / `docker build` | Yes, the first time |
-| Docker Desktop + Docker Compose | Docker 29 / Compose 5 | Optional (alternative to Python) |
+| Internet | only the first time (`pip install`) | Yes, the first time |
+| Docker Desktop + Docker Compose | Docker 29 / Compose 5 | Optional (option B) |
 
 **Not needed:** database, API keys, environment variables, external services or AI models — every external system is mocked with the exam data.
 
-Python dependencies install automatically: `backend/requirements.txt` (`fastapi`, `uvicorn`, `pydantic` v2, `pytest`, `httpx`) and `frontend/requirements.txt` (`streamlit`, `requests`, `pytest`).
+Dependencies (installed automatically by `run.py`): `backend/requirements.txt` (`fastapi`, `uvicorn`, `pydantic` v2, `pytest`, `httpx`) and `frontend/requirements.txt` (`streamlit` ≥ 1.50, `requests`, `pytest`).
 
-### Option A — Python (recommended)
-**Windows (PowerShell), terminal 1 — backend:**
+### Option A — manual (if you prefer separate terminals)
 ```powershell
-git clone https://github.com/brianoropeza/parcial-algoritmo-y-sistemas.git
-cd parcial-algoritmo-y-sistemas
 py -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt -r frontend\requirements.txt
-cd backend
-..\.venv\Scripts\python.exe -m pytest -q                         # expected: 27 passed
-..\.venv\Scripts\python.exe -m uvicorn app.main:app --port 8000   # API at http://localhost:8000/docs
+# terminal 1
+cd backend;  ..\.venv\Scripts\python.exe -m uvicorn app.main:app --port 8000
+# terminal 2
+cd frontend; ..\.venv\Scripts\python.exe -m streamlit run app.py
 ```
-**Terminal 2 — frontend** (with the API running):
-```powershell
-cd parcial-algoritmo-y-sistemas\frontend
-..\.venv\Scripts\python.exe -m pytest -q                         # expected: 27 passed
-..\.venv\Scripts\python.exe -m streamlit run app.py              # http://localhost:8501
-```
-**Linux / macOS:**
-```bash
-git clone https://github.com/brianoropeza/parcial-algoritmo-y-sistemas.git
-cd parcial-algoritmo-y-sistemas
-python3 -m venv .venv && .venv/bin/pip install -r backend/requirements.txt -r frontend/requirements.txt
-cd backend && ../.venv/bin/python -m pytest -q && ../.venv/bin/python -m uvicorn app.main:app --port 8000
-# second terminal
-cd frontend && ../.venv/bin/python -m pytest -q && ../.venv/bin/python -m streamlit run app.py
-```
+Linux / macOS: same steps with `python3 -m venv .venv` and `.venv/bin/python`.
 
 ### Option B — Docker
 ```bash
@@ -91,7 +90,7 @@ docker compose exec backend pytest -q
 docker compose exec frontend pytest -q
 # API at http://localhost:8000/docs · Frontend at http://localhost:8501 ; stop with: docker compose down
 ```
-*Docker could not be verified on the development machine (WSL 2 still installing); option A is verified.*
+*Docker could not be verified on the development machine (WSL 2 still installing); `run.py` and option A are verified.*
 
 ### Demonstrating the main decision
 **Frontend:** open `http://localhost:8501`, enter `ABC123` and click **Check my trip**. The rebooking button is blocked (R5) and **Talk to a person** creates case HC-4471.
@@ -110,7 +109,7 @@ Expected: `classification = DISRUPTION_REVIEW_REQUIRED`, `action_level = HUMAN`,
 | `POST /api/actions/rebook` | Without approval → 409; repeated with the same key → 409 `DUPLICATE_REQUEST` |
 | `POST /api/actions/escalate` | Creates human case HC-4471 |
 
-**Validation:** 27 backend tests (base case, degraded source, conflict between trusted sources, missed connection, rules, option filtering, human approval, idempotency, escalation, 404, notification without `policy_ref`, personal data) and 27 frontend tests (input validation, personal-data allow-list, HTTP error handling, rendering of the real backend response). Integration verified with both services running.
+**Validation:** 27 backend tests (base case, degraded source, conflict between trusted sources, missed connection, rules, option filtering, human approval, idempotency, escalation, 404, notification without `policy_ref`, personal data) and 27 frontend tests (input validation, personal-data allow-list, HTTP error handling, rendering of the real backend response). Integration verified with both services running (`run.py`, Windows with Python 3.14 and Linux with Python 3.13).
 
 ## 7. Risks, limitations and next steps
 - `approved_case_id` is not verified against a real approval system. Next step: a registry of approved cases.

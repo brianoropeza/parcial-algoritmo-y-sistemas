@@ -4,6 +4,13 @@ Passenger-facing screen. **It decides nothing**: it displays what the backend re
 
 ## Run
 
+Fastest way, from the repository root (starts backend + frontend with one command):
+
+```sh
+py run.py          # Windows  (Linux / macOS: python3 run.py)
+py run.py --test   # backend + frontend tests
+```
+
 With Docker (from the repository root, starts backend + frontend):
 
 ```sh
@@ -13,21 +20,7 @@ docker compose exec frontend pytest -q
 
 Frontend: http://localhost:8501 · Backend: http://localhost:8000/docs
 
-Without Docker (two terminals, Python 3.12):
-
-```sh
-# terminal 1
-cd backend
-python -m pip install -r requirements.txt
-python -m uvicorn app.main:app --port 8000
-
-# terminal 2
-cd frontend
-python -m pip install -r requirements.txt
-python -m streamlit run app.py
-python -m pytest -q
-```
-
+Requires Python 3.12 or later and Streamlit ≥ 1.50 (`streamlit==1.39.0` was unpinned because it cannot be installed on Python 3.14).
 `BACKEND_URL` defaults to `http://localhost:8000`.
 
 ## What it does
